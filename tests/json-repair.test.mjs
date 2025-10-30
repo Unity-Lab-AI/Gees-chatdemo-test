@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { looseJsonParse, extractJsonObjectsAndStrayText, repairModelOutput } from '../src/lib/json-repair.js';
+import { looseJsonParse, extractJsonObjectsAndStrayText, repairModelOutput } from '../demo2/src/lib/json-repair.js';
 
 export const name = 'JSON repair: smart quotes, multiple objects, stray prose merge';
 

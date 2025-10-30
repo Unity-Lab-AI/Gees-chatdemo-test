@@ -3,7 +3,7 @@ import {
   parseImageDirectives,
   primeUserContent,
   resetPrimingStateForTests,
-} from '../src/mobile/app.js';
+} from '../demo2/src/mobile/app.js';
 
 export const name = 'mobile text utilities behave predictably';
 

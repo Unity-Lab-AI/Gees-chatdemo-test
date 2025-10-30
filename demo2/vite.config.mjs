@@ -1,16 +1,21 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 
+const demoRoot = fileURLToPath(new URL('.', import.meta.url));
+
 export default defineConfig({
-  root: '.',
+  root: demoRoot,
   base: './',
+  publicDir: path.resolve(demoRoot, 'public'),
   envPrefix: ['VITE_', 'POLLI_', 'POLLINATIONS_'],
   build: {
-    outDir: 'dist',
+    outDir: path.resolve(demoRoot, 'dist'),
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        main: 'index.html',
-        mobile: 'mobile/index.html',
+        main: path.resolve(demoRoot, 'index.html'),
+        mobile: path.resolve(demoRoot, 'mobile/index.html'),
       },
     },
   },
