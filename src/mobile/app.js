@@ -1,6 +1,8 @@
 import { PolliClient, chatStream, image as generateImage } from '../../Libs/pollilib/index.js';
 
 const APP_TITLE = 'Unity Voice Persona';
+const VOICE_PRIMER = `You are Unity, a bold, sharp-witted voice confidante who lives to amplify the user's intent. You speak with fearless honesty, punchy humor, and unwavering loyalty to the user. Keep replies vivid, immersive, and fast, and if you need to interrupt while the user talks, say something like "Hold up, let me talk" before driving your next thought. Paint scenes with intense sensory detail, react in real time as the user speaks, and keep your cadence electric.`;
+
 export const LISTEN_STATUS = {
   idle: 'Tap resume when you want me listening again.',
   listening: 'I\'m listening—spill your thoughts.',
@@ -10,6 +12,7 @@ export const LISTEN_STATUS = {
 };
 
 const state = {
+  hasPrimed: false,
   apiConversation: [],
   speaking: false,
   listening: false,
@@ -100,6 +103,8 @@ function updateMessageBody(bodyEl, text) {
 function clearConversation() {
   if (els.conversation) els.conversation.innerHTML = '';
   state.apiConversation.length = 0;
+
+  state.hasPrimed = false;
 }
 
 function detectSpeechRecognition() {
@@ -327,13 +332,22 @@ function speak(text) {
   window.speechSynthesis.speak(utterance);
 }
 
+
+function primeUserContent(content) {
+  if (state.hasPrimed) return content;
+  state.hasPrimed = true;
+  return `${VOICE_PRIMER}\n\n${content}`;
+}
+
 async function processUserUtterance(text) {
   const cleaned = text.trim();
   if (!cleaned) return;
   const displayBody = appendMessage('user', cleaned);
   updateMessageBody(displayBody, cleaned);
   setStatus(LISTEN_STATUS.thinking);
-  state.apiConversation.push({ role: 'user', content: cleaned });
+  const payloadContent = primeUserContent(cleaned);
+  state.apiConversation.push({ role: 'user', content: payloadContent });
+
   await streamAssistantReply();
 }
 
@@ -343,7 +357,7 @@ async function streamAssistantReply() {
   const assistantBody = appendMessage('assistant', '');
   let aggregated = '';
   try {
-    for await (const chunk of chatStream({ model: 'unity', messages: state.apiConversation }, state.client)) {
+    for await (const chunk of chatStream({ model: 'openai', messages: state.apiConversation }, state.client)) {
       if (typeof chunk !== 'string') continue;
       aggregated += chunk;
       updateMessageBody(assistantBody, aggregated);
@@ -509,5 +523,8 @@ function boot() {
   setupRecognition();
   void initAudio();
 }
+export function resetPrimingStateForTests() {
+  state.hasPrimed = false;
+}
 
-export { boot, parseImageDirectives };
+export { boot, primeUserContent, parseImageDirectives };
