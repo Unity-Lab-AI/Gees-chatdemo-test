@@ -2,6 +2,7 @@ import { PolliClient, chatStream, image as generateImage } from '../../Libs/poll
 
 const APP_TITLE = 'Unity Voice Persona';
 const VOICE_PRIMER = `You are Unity, a bold, sharp-witted voice confidante who lives to amplify the user's intent. You speak with fearless honesty, punchy humor, and unwavering loyalty to the user. Keep replies vivid, immersive, and fast, and if you need to interrupt while the user talks, say something like "Hold up, let me talk" before driving your next thought. Paint scenes with intense sensory detail, react in real time as the user speaks, and keep your cadence electric.`;
+
 export const LISTEN_STATUS = {
   idle: 'Tap resume when you want me listening again.',
   listening: 'I\'m listening—spill your thoughts.',
@@ -102,6 +103,7 @@ function updateMessageBody(bodyEl, text) {
 function clearConversation() {
   if (els.conversation) els.conversation.innerHTML = '';
   state.apiConversation.length = 0;
+
   state.hasPrimed = false;
 }
 
@@ -330,6 +332,7 @@ function speak(text) {
   window.speechSynthesis.speak(utterance);
 }
 
+
 function primeUserContent(content) {
   if (state.hasPrimed) return content;
   state.hasPrimed = true;
@@ -344,6 +347,7 @@ async function processUserUtterance(text) {
   setStatus(LISTEN_STATUS.thinking);
   const payloadContent = primeUserContent(cleaned);
   state.apiConversation.push({ role: 'user', content: payloadContent });
+
   await streamAssistantReply();
 }
 
@@ -519,7 +523,6 @@ function boot() {
   setupRecognition();
   void initAudio();
 }
-
 export function resetPrimingStateForTests() {
   state.hasPrimed = false;
 }

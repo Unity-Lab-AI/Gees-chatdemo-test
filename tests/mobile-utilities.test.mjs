@@ -28,7 +28,7 @@ export async function run() {
   );
 
   resetPrimingStateForTests();
-
+  
   const blockPayload = `Unity responds with art.\n\n\n\`\`\`polli-image\n{\n  "prompt": "A neon skyline dripping with attitude",\n  "width": 768,\n  "images": [\n    { "prompt": "Alternate view", "height": 1024 }\n  ]\n}\n\`\`\``;
   const directives = parseImageDirectives(blockPayload);
   assert.equal(directives.length, 2, 'code block directives should include nested images without duplication');
