@@ -18,6 +18,7 @@ const hasMediaDevices = Boolean(
 );
 const voiceInputSupported = Boolean(SpeechRecognition && hasMediaDevices);
 const voicePlaybackSupported = Boolean(speechSynth && SpeechSynthesisUtteranceCtor);
+const TTS_CHUNK_MAX_CHARS = 250;
 const voiceInputUnsupportedMessage = !SpeechRecognition
   ? 'Voice input is not supported in this browser. You can still type messages.'
   : !hasMediaDevices
@@ -80,6 +81,44 @@ const state = {
   voiceInputUnsupportedMessage,
 };
 
+const voiceState = {
+  queue: [],
+  current: null,
+};
+
+function buildTtsChunks(text, { maxChars = TTS_CHUNK_MAX_CHARS } = {}) {
+  if (!text) return [];
+  const sanitized = String(text).replace(/\s+/g, ' ').trim();
+  if (!sanitized) return [];
+  const chunks = [];
+  let current = '';
+  const words = sanitized.split(' ');
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (candidate.length > maxChars && current) {
+      chunks.push(current);
+      current = word;
+      if (current.length > maxChars) {
+        for (let i = 0; i < current.length; i += maxChars) {
+          const slice = current.slice(i, i + maxChars);
+          if (slice) chunks.push(slice);
+        }
+        current = '';
+      }
+    } else if (candidate.length > maxChars) {
+      for (let i = 0; i < candidate.length; i += maxChars) {
+        const slice = candidate.slice(i, i + maxChars);
+        if (slice) chunks.push(slice);
+      }
+      current = '';
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
 function escapeHtml(str) {
   return String(str)
     .replace(/&/g, '&amp;')
@@ -120,21 +159,44 @@ function setPending(pending) {
   els.reset.disabled = pending;
 }
 
-function speak(text) {
-  if (!state.voicePlaybackSupported || !text) return;
-  speechSynth.cancel();
-  const summary = summariseForSpeech(text, { maxLength: 600 });
-  if (!summary) return;
-  const utterance = new SpeechSynthesisUtteranceCtor(summary);
+function speakChunk(chunk) {
+  if (!chunk) return;
+  const utterance = new SpeechSynthesisUtteranceCtor(chunk);
   utterance.rate = 1;
   utterance.pitch = 1;
+  utterance.onend = () => {
+    if (!voiceState.queue.length) {
+      voiceState.current = null;
+      return;
+    }
+    const next = voiceState.queue.shift();
+    voiceState.current = next;
+    speakChunk(next);
+  };
   speechSynth.speak(utterance);
+}
+
+function startVoicePlaybackForMessage(raw) {
+  if (!state.voicePlaybackSupported || !raw) return;
+  speechSynth.cancel();
+  voiceState.queue = [];
+  voiceState.current = null;
+  const summary = summariseForSpeech(raw, { maxLength: 600 });
+  if (!summary) return;
+  const rawChunks = buildTtsChunks(raw, { maxChars: TTS_CHUNK_MAX_CHARS });
+  const chunks = rawChunks.length ? rawChunks : buildTtsChunks(summary, { maxChars: TTS_CHUNK_MAX_CHARS });
+  if (!chunks.length) return;
+  voiceState.queue = chunks.slice(1);
+  voiceState.current = chunks[0];
+  speakChunk(chunks[0]);
 }
 
 function stopSpeaking() {
   if (state.voicePlaybackSupported) {
     speechSynth.cancel();
   }
+  voiceState.queue = [];
+  voiceState.current = null;
 }
 
 async function sendMessage(rawText) {
@@ -161,7 +223,7 @@ async function sendMessage(rawText) {
     if (reply) {
       state.conversation = pushMessage(state.conversation, 'assistant', reply);
       renderConversation();
-      speak(reply);
+      startVoicePlaybackForMessage(reply);
       setStatus('Assistant reply ready.');
     } else {
       setStatus('The assistant returned an empty response.');
