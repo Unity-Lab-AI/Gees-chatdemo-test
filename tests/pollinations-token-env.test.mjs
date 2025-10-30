@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createPollinationsClient } from '../src/pollinations-client.js';
+import { createPollinationsClient } from '../demo2/src/pollinations-client.js';
 
 export const name = 'Pollinations client ignores tokens from environment variables (referrer-only)';
 

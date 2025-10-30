@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { matchesModelIdentifier, normalizeTextCatalog } from '../src/model-catalog.js';
+import { matchesModelIdentifier, normalizeTextCatalog } from '../demo2/src/model-catalog.js';
 
 export const name = 'Model catalog normalization infers endpoints and aliases';
 

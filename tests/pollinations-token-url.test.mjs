@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createPollinationsClient } from '../src/pollinations-client.js';
+import { createPollinationsClient } from '../demo2/src/pollinations-client.js';
 import { chat } from '../Libs/pollilib/index.js';
 
 export const name = 'Chat wrapper includes referrer in payload';

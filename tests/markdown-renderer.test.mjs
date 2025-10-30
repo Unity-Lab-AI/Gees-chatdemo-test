@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { renderMarkdown } from '../src/lib/markdown.js';
+import { renderMarkdown } from '../demo2/src/lib/markdown.js';
 
 export const name = 'Markdown: renders fenced code with syntax highlighting and GFM basics';
 

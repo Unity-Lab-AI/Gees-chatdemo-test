@@ -1,8 +1,9 @@
 # chatdemo
 
 Static browser demo for interacting with [Pollinations](https://pollinations.ai) using the bundled
-[PolliLib](./Libs/pollilib/) client. The application is built with Vite so it can be deployed to a
-static host such as GitHub Pages. It features:
+[PolliLib](./Libs/pollilib/) client. The Vite application now lives entirely under
+[`demo2/`](./demo2/) so the same source tree powers both the desktop chat and the mobile, voice-first
+Unity persona experience. It features:
 
 ## Main branch status
 
@@ -22,14 +23,18 @@ npm install
 npm run dev
 ```
 
+The `dev` script delegates to the Vite config in `demo2/`, so the desktop UI renders at
+`http://localhost:5173/` while mobile browsers are redirected to the hands-free experience at
+`http://localhost:5173/mobile/`.
+
 ## Building for static hosting
 
 ```bash
 npm run build
 ```
 
-The generated assets are written to `dist/` and can be published as-is. When hosted on GitHub Pages
-make sure the contents of `dist/` are deployed.
+Artifacts are written to `demo2/dist/`. Deploy that folder to your static host (for example GitHub
+Pages). The desktop entry point is `index.html` and the mobile shell lives at `mobile/index.html`.
 
 ## Configuring the Pollinations token
 
@@ -61,10 +66,12 @@ match Pollinations' expected request format.
 
 ## Project structure
 
-- `src/` — app entrypoints and styles; core helpers live under `src/lib/`.
+- `demo2/` — Vite application containing both the desktop chat (`index.html`) and mobile voice shell
+  (`mobile/index.html`). Assets are emitted to `demo2/dist/` during builds.
+- `demo2/src/` — app entrypoints and styles; core helpers live under `demo2/src/lib/`.
 - `Libs/pollilib/` — compatibility import surface for the bundled PolliLib client.
 - `libs/PolliLib/` — vendored PolliLib submodule (JavaScript + Python sources).
-- `public/` — static assets served at the web root (e.g. `sw.js`).
+- `demo2/public/` — static assets served at the web root (e.g. `sw.js`).
 - `tools/` — local build/test utilities invoked by CI and npm scripts.
 - `tests/` — self-contained integration tests (run via `npm test`).
 - `reports/` — artifacts from tests and model checks.

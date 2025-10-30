@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { renderMarkdown, enhanceCodeBlocksHtml } from '../src/lib/markdown.js';
+import { renderMarkdown, enhanceCodeBlocksHtml } from '../demo2/src/lib/markdown.js';
 
 export const name = 'Code copy: injects a copy button for each fenced block';
 

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { generateSeed } from '../src/seed.js';
+import { generateSeed } from '../demo2/src/seed.js';
 
 export const name = 'Seed generator produces eight-digit integers';
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { createFallbackModel } from '../src/model-catalog.js';
-import { doesResponseMatchModel, isMatchingModelName } from '../src/model-matching.js';
+import { createFallbackModel } from '../demo2/src/model-catalog.js';
+import { doesResponseMatchModel, isMatchingModelName } from '../demo2/src/model-matching.js';
 
 export const name = 'Model response metadata allows alias matching';
 
