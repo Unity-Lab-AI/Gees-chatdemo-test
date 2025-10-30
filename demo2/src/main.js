@@ -2,7 +2,7 @@ import './style.css';
 import 'highlight.js/styles/github.css';
 import { renderMarkdown, enhanceCodeBlocksHtml } from './lib/markdown.js';
 import { looseJsonParse, repairModelOutput } from './lib/json-repair.js';
-import { chat, chatStream, image, textModels } from '../Libs/pollilib/index.js';
+import { chat, chatStream, image, textModels } from './Libs/pollilib/index.js';
 import { generateSeed } from './seed.js';
 import { createPollinationsClient } from './pollinations-client.js';
 import {
@@ -100,6 +100,47 @@ let client = null;
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
 const app = document.querySelector('#app');
+
+function shouldRedirectToMobileExperience() {
+  if (typeof window === 'undefined') return false;
+  try {
+    const ua = navigator.userAgent || '';
+    const isTouchCapable = 'ontouchstart' in window || navigator.maxTouchPoints > 1;
+    const prefersDesktopWidth = window.matchMedia?.('(min-width: 768px)')?.matches;
+    if (!isTouchCapable || prefersDesktopWidth) return false;
+    return /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(ua);
+  } catch (error) {
+    console.warn('Unable to determine mobile environment', error);
+    return false;
+  }
+}
+
+function maybeRedirectToMobileExperience() {
+  if (!shouldRedirectToMobileExperience()) return false;
+  if (typeof window === 'undefined') return false;
+  try {
+    const currentPath = window.location.pathname || '';
+    if (/\/mobile\/(?:index\.html)?$/u.test(currentPath)) {
+      return false;
+    }
+    const destination = new URL('./mobile/', window.location.href);
+    window.location.replace(destination.toString());
+    return true;
+  } catch (error) {
+    console.warn('Failed to redirect to mobile shell', error);
+    return false;
+  }
+}
+
+const redirectedToMobile = maybeRedirectToMobileExperience();
+if (redirectedToMobile && app) {
+  app.innerHTML = `
+    <main class="container redirecting" aria-live="polite">
+      <p>Redirecting to Unity's voice experience…</p>
+    </main>
+  `;
+}
+
 const DEBUG = (() => {
   try {
     const u = new URL(location.href);
@@ -137,369 +178,370 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       .catch((err) => console.warn('SW register failed', err));
   });
 }
-app.innerHTML = `
-  <main class="container">
-    <header class="toolbar">
-      <div class="field">
-        <label for="modelSelect">Model</label>
-        <select id="modelSelect" name="model"></select>
-      </div>
-      <div class="field">
-        <label for="voiceSelect">Voice</label>
-        <select id="voiceSelect" name="voice"></select>
-      </div>
-      <div class="field toggle">
-        <span class="toggle-label" id="voicePlaybackLabel">Voice playback</span>
-        <label class="switch" for="voicePlayback" aria-labelledby="voicePlaybackLabel">
-          <input type="checkbox" id="voicePlayback" />
-          <span class="slider" aria-hidden="true"></span>
-          <span class="toggle-state" aria-hidden="true"></span>
-        </label>
-      </div>
-    </header>
-    <div id="status" class="status" role="status" aria-live="polite"></div>
-    <section id="messages" class="messages" aria-live="polite"></section>
-    <form id="chatForm" class="chat-form">
-      <label class="sr-only" for="promptInput">Message</label>
-      <textarea
-        id="promptInput"
-        placeholder="Ask anything or request an image"
-        autocomplete="off"
-      ></textarea>
-      <button id="voiceButton" type="button" class="voice" aria-pressed="false">
-        🎙️ Speak
-      </button>
-      <button id="sendButton" type="submit" class="primary">Send</button>
-    </form>
-    <p class="hint">
-      Tip: Voice capture ends automatically after 0.5 seconds of silence. Ask for images
-      naturally and the assistant will create them when helpful.
-    </p>
-  </main>
-`;
-
-let debugEl = null;
-if (DEBUG) {
-  const panel = document.createElement('section');
-  panel.className = 'debug-panel';
-  panel.style.marginTop = '12px';
-  panel.style.padding = '8px 12px';
-  panel.style.border = '1px solid #ccc';
-  panel.style.borderRadius = '6px';
-  panel.style.background = '#fafafa';
-  panel.innerHTML = `
-    <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-      <h3 style="margin:0; font-size:14px;">Diagnostics</h3>
-      <div style="display:flex; gap:6px;">
-        <button id="dbgCopy" class="ghost" type="button">Copy Logs</button>
-        <button id="dbgClear" class="ghost" type="button">Clear Logs</button>
-        <button id="dbgHealth" class="ghost" type="button">Health Check</button>
-        <label style="display:inline-flex; align-items:center; gap:4px; font-size:12px; color:#374151;">
-          <input id="dbgShowPayloads" type="checkbox" /> Show payload meta
-        </label>
-      </div>
-    </div>
-    <div id="debugContent" style="margin-top:8px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace; font-size:12px; white-space:pre-wrap;"></div>
+function initializeDesktopApp() {
+    app.innerHTML = `
+    <main class="container">
+      <header class="toolbar">
+        <div class="field">
+          <label for="modelSelect">Model</label>
+          <select id="modelSelect" name="model"></select>
+        </div>
+        <div class="field">
+          <label for="voiceSelect">Voice</label>
+          <select id="voiceSelect" name="voice"></select>
+        </div>
+        <div class="field toggle">
+          <span class="toggle-label" id="voicePlaybackLabel">Voice playback</span>
+          <label class="switch" for="voicePlayback" aria-labelledby="voicePlaybackLabel">
+            <input type="checkbox" id="voicePlayback" />
+            <span class="slider" aria-hidden="true"></span>
+            <span class="toggle-state" aria-hidden="true"></span>
+          </label>
+        </div>
+      </header>
+      <div id="status" class="status" role="status" aria-live="polite"></div>
+      <section id="messages" class="messages" aria-live="polite"></section>
+      <form id="chatForm" class="chat-form">
+        <label class="sr-only" for="promptInput">Message</label>
+        <textarea
+          id="promptInput"
+          placeholder="Ask anything or request an image"
+          autocomplete="off"
+        ></textarea>
+        <button id="voiceButton" type="button" class="voice" aria-pressed="false">
+          🎙️ Speak
+        </button>
+        <button id="sendButton" type="submit" class="primary">Send</button>
+      </form>
+      <p class="hint">
+        Tip: Voice capture ends automatically after 0.5 seconds of silence. Ask for images
+        naturally and the assistant will create them when helpful.
+      </p>
+    </main>
   `;
-  app.querySelector('.container')?.appendChild(panel);
-  debugEl = panel.querySelector('#debugContent');
-  const btnCopy = panel.querySelector('#dbgCopy');
-  const btnClear = panel.querySelector('#dbgClear');
-  const btnHealth = panel.querySelector('#dbgHealth');
-  const chkPayload = panel.querySelector('#dbgShowPayloads');
-  if (btnCopy) btnCopy.addEventListener('click', copyLogsToClipboard);
-  if (btnClear) btnClear.addEventListener('click', clearPanelLogs);
-  if (btnHealth) btnHealth.addEventListener('click', runHealthCheck); 
-  if (chkPayload) chkPayload.addEventListener('change', () => renderDebugPanel());
 
-  // Ensure a log buffer exists and live-refresh the panel
-  try {
-    if (!globalThis.__PANEL_LOG__ || !Array.isArray(globalThis.__PANEL_LOG__)) {
-      globalThis.__PANEL_LOG__ = [];
-    }
-  } catch {}
-  try {
-    if (!globalThis.__DBG_REFRESH__) {
-      globalThis.__DBG_REFRESH__ = setInterval(() => renderDebugPanel(), 1000);
-    }
-  } catch {}
-  renderDebugPanel();
-}
+  let debugEl = null;
+  if (DEBUG) {
+    const panel = document.createElement('section');
+    panel.className = 'debug-panel';
+    panel.style.marginTop = '12px';
+    panel.style.padding = '8px 12px';
+    panel.style.border = '1px solid #ccc';
+    panel.style.borderRadius = '6px';
+    panel.style.background = '#fafafa';
+    panel.innerHTML = `
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+        <h3 style="margin:0; font-size:14px;">Diagnostics</h3>
+        <div style="display:flex; gap:6px;">
+          <button id="dbgCopy" class="ghost" type="button">Copy Logs</button>
+          <button id="dbgClear" class="ghost" type="button">Clear Logs</button>
+          <button id="dbgHealth" class="ghost" type="button">Health Check</button>
+          <label style="display:inline-flex; align-items:center; gap:4px; font-size:12px; color:#374151;">
+            <input id="dbgShowPayloads" type="checkbox" /> Show payload meta
+          </label>
+        </div>
+      </div>
+      <div id="debugContent" style="margin-top:8px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace; font-size:12px; white-space:pre-wrap;"></div>
+    `;
+    app.querySelector('.container')?.appendChild(panel);
+    debugEl = panel.querySelector('#debugContent');
+    const btnCopy = panel.querySelector('#dbgCopy');
+    const btnClear = panel.querySelector('#dbgClear');
+    const btnHealth = panel.querySelector('#dbgHealth');
+    const chkPayload = panel.querySelector('#dbgShowPayloads');
+    if (btnCopy) btnCopy.addEventListener('click', copyLogsToClipboard);
+    if (btnClear) btnClear.addEventListener('click', clearPanelLogs);
+    if (btnHealth) btnHealth.addEventListener('click', runHealthCheck); 
+    if (chkPayload) chkPayload.addEventListener('change', () => renderDebugPanel());
 
-function renderDebugPanel(extra = {}) {
-  if (!DEBUG || !debugEl) return;
-  const rev = (globalThis && globalThis.__BUILD_REV__) || null;
-  const ref = (globalThis && globalThis.__POLLINATIONS_REFERRER__) || null;
-  const log = (globalThis && globalThis.__PANEL_LOG__) || [];
-  const active = state?.activeModel?.info?.id || els?.modelSelect?.value || null;
-  const endpoints = state?.activeModel?.info?.endpoints || [];
-  const recent = log.slice(-12);
-  const sw = (navigator.serviceWorker && navigator.serviceWorker.controller) ? 'active' : 'none';
-  const modelPinned = state?.pinnedModelId || null;
-  const convoLen = state?.conversation?.length || 0;
-  const showPayloads = !!document.querySelector('#dbgShowPayloads')?.checked;
-  const ua = navigator.userAgent;
-  const url = location.href;
-  const jsonMode = false;
-  // TTS diagnostics
-  const tts = (() => {
+    // Ensure a log buffer exists and live-refresh the panel
     try {
-      const job = currentTtsJob || null;
-      if (!job) return { active: false, queue: ttsQueue.length, cooldownMs: ttsFetchCooldownMs };
-      // compute contiguous ready ahead
-      let readyAhead = 0;
-      for (let i = job.playIndex; i < job.groups.length; i += 1) {
-        const r = job.results[i];
-        if (typeof r === 'string' && r) { readyAhead += 1; }
-        else if (r === TTS_CHUNK_ERROR) { readyAhead += 1; }
-        else break;
+      if (!globalThis.__PANEL_LOG__ || !Array.isArray(globalThis.__PANEL_LOG__)) {
+        globalThis.__PANEL_LOG__ = [];
       }
-      return {
-        active: true,
-        chunks: job.groups.length,
-        inflight: job.inflight,
-        nextFetchIndex: job.nextFetchIndex,
-        playIndex: job.playIndex,
-        readyAhead,
-        cooldownMs: ttsFetchCooldownMs,
-        queue: ttsQueue.length,
-      };
-    } catch { return { active: false, queue: ttsQueue.length, cooldownMs: ttsFetchCooldownMs }; }
-  })();
-
-  const payload = {
-    version: rev,
-    referrer: ref,
-    selectedModel: active,
-    pinnedModel: modelPinned,
-    endpoints,
-    jsonMode,
-    url,
-    ua,
-    serviceWorker: sw,
-    conversationLength: convoLen,
-    lastRequests: recent,
-    tts,
-    ...extra,
-  };
-  if (!showPayloads) {
-    // Redact verbose details
-    const redacted = JSON.parse(JSON.stringify(payload));
-    if (Array.isArray(redacted.lastRequests)) {
-      redacted.lastRequests = redacted.lastRequests.map(entry => {
-        const e = { ...entry };
-        if (e.meta && typeof e.meta === 'object') {
-          // keep only high-level meta flags
-          e.meta = {
-            ...('endpoint' in e.meta ? { endpoint: e.meta.endpoint } : {}),
-            ...('json' in e.meta ? { json: e.meta.json } : {}),
-            ...('has_tools' in e.meta ? { has_tools: e.meta.has_tools } : {}),
-            ...('tool_count' in e.meta ? { tool_count: e.meta.tool_count } : {}),
-          };
-        }
-        // trim noisy fields
-        delete e.prompt; delete e.payload; delete e.body;
-        return e;
-      });
-    }
-    debugEl.textContent = JSON.stringify(redacted, null, 2);
-  } else {
-    debugEl.textContent = JSON.stringify(payload, null, 2);
-  }
-}
-
-// Fast-path streaming for text-only prompts to improve perceived latency
-async function sendPromptStreaming(prompt) {
-  const selectedModel = getSelectedModel();
-  if (!selectedModel) throw new Error('No model selected.');
-  if (!client) throw new Error('Pollinations client is not ready.');
-  const endpoints = buildEndpointSequence(selectedModel);
-  if (!endpoints.length) throw new Error(`No endpoints available for model "${selectedModel.label ?? selectedModel.id}".`);
-
-  const startingLength = state.conversation.length;
-  // Do NOT inject the JSON primer for streaming text-only turns
-  state.conversation.push({ role: 'user', content: prompt });
-  try {
-    setStatus('Streaming response…');
-    const assistantMsg = addMessage({ role: 'assistant', type: 'text', content: '' });
-    const pinnedId = state.pinnedModelId || selectedModel.id;
-    const endpoint = endpoints[0] || 'openai';
-    state.activeModel = { id: pinnedId, endpoint, info: selectedModel };
-    if (!state.pinnedModelId) state.pinnedModelId = pinnedId;
-    let streamed = '';
-    let rafScheduled = false;
-    const scheduleRender = () => {
-      if (rafScheduled) return;
-      rafScheduled = true;
-      const run = () => {
-        rafScheduled = false;
-        renderMessages();
-      };
-      if (typeof requestAnimationFrame === 'function') {
-        requestAnimationFrame(run);
-      } else {
-        setTimeout(run, 50);
-      }
-    };
+    } catch {}
     try {
-      // Do not include 'seed' for text chat; OpenAI route rejects it
-      for await (const chunk of chatStream({ model: pinnedId, endpoint, messages: state.conversation }, client)) {
-        if (typeof chunk === 'string' && chunk) {
-          streamed += chunk;
-          assistantMsg.content = streamed;
-          scheduleRender();
-        }
+      if (!globalThis.__DBG_REFRESH__) {
+        globalThis.__DBG_REFRESH__ = setInterval(() => renderDebugPanel(), 1000);
       }
-    } catch (e) {
-      // Fallback to existing non-stream flow
-      console.warn('Streaming failed; falling back to standard request', e);
-      state.conversation.length = startingLength; // revert user injection
-      return await sendPrompt(prompt);
-    }
-    if (streamed.trim()) {
-      state.conversation.push({ role: 'assistant', content: streamed });
-      renderMessages();
-      if (state.voicePlayback && els.voiceSelect.value) {
-        void speakMessage(assistantMsg, { autoplay: true });
-      }
-    }
-    resetStatusIfIdle();
-  } catch (error) {
-    console.error('Chat error (streaming)', error);
-    state.conversation.length = startingLength;
-    throw error;
-  }
-}
-
-async function copyLogsToClipboard() {
-  try {
-    const data = (globalThis && globalThis.__PANEL_LOG__) || [];
-    const payload = { when: new Date().toISOString(), data };
-    await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
-    setStatus('Diagnostics copied to clipboard.');
-    setTimeout(() => resetStatusIfIdle(), 1500);
-  } catch (e) {
-    console.warn('Copy failed', e);
-    setStatus('Unable to copy diagnostics.', { error: true });
-  }
-}
-
-function clearPanelLogs() {
-  try {
-    const log = (globalThis && globalThis.__PANEL_LOG__);
-    if (log && Array.isArray(log)) log.length = 0;
+    } catch {}
     renderDebugPanel();
-    setStatus('Diagnostics cleared.');
-    setTimeout(() => resetStatusIfIdle(), 1200);
-  } catch (e) {
-    console.warn('Clear logs failed', e);
   }
-}
 
-async function runHealthCheck() {
-  try {
-    const model = getSelectedModel();
-    if (!model) throw new Error('No model selected.');
-    if (!client) throw new Error('Client not ready.');
-    setStatus('Running health check…');
-    const messages = [{ role: 'user', content: 'Return the word OK.' }];
-    const payload = { model: model.id, endpoint: 'openai', messages, response_format: { type: 'json_object' } };
-    const started = Date.now();
-    const resp = await chat(payload, client);
-    const ms = Date.now() - started;
-    const ok = Array.isArray(resp?.choices) && (resp.choices[0]?.message?.content ?? '').length >= 2;
-    renderDebugPanel({ health: { ok, ms, model: model.id } });
-    setStatus(ok ? `Health OK (${ms} ms).` : `Health failed (${ms} ms).`, { error: !ok });
-    setTimeout(() => resetStatusIfIdle(), 1500);
-  } catch (e) {
-    console.warn('Health check failed', e);
-    renderDebugPanel({ health: { ok: false, error: e?.message || String(e) } });
-    setStatus('Health check failed: ' + (e?.message || String(e)), { error: true });
+  function renderDebugPanel(extra = {}) {
+    if (!DEBUG || !debugEl) return;
+    const rev = (globalThis && globalThis.__BUILD_REV__) || null;
+    const ref = (globalThis && globalThis.__POLLINATIONS_REFERRER__) || null;
+    const log = (globalThis && globalThis.__PANEL_LOG__) || [];
+    const active = state?.activeModel?.info?.id || els?.modelSelect?.value || null;
+    const endpoints = state?.activeModel?.info?.endpoints || [];
+    const recent = log.slice(-12);
+    const sw = (navigator.serviceWorker && navigator.serviceWorker.controller) ? 'active' : 'none';
+    const modelPinned = state?.pinnedModelId || null;
+    const convoLen = state?.conversation?.length || 0;
+    const showPayloads = !!document.querySelector('#dbgShowPayloads')?.checked;
+    const ua = navigator.userAgent;
+    const url = location.href;
+    const jsonMode = false;
+    // TTS diagnostics
+    const tts = (() => {
+      try {
+        const job = currentTtsJob || null;
+        if (!job) return { active: false, queue: ttsQueue.length, cooldownMs: ttsFetchCooldownMs };
+        // compute contiguous ready ahead
+        let readyAhead = 0;
+        for (let i = job.playIndex; i < job.groups.length; i += 1) {
+          const r = job.results[i];
+          if (typeof r === 'string' && r) { readyAhead += 1; }
+          else if (r === TTS_CHUNK_ERROR) { readyAhead += 1; }
+          else break;
+        }
+        return {
+          active: true,
+          chunks: job.groups.length,
+          inflight: job.inflight,
+          nextFetchIndex: job.nextFetchIndex,
+          playIndex: job.playIndex,
+          readyAhead,
+          cooldownMs: ttsFetchCooldownMs,
+          queue: ttsQueue.length,
+        };
+      } catch { return { active: false, queue: ttsQueue.length, cooldownMs: ttsFetchCooldownMs }; }
+    })();
+
+    const payload = {
+      version: rev,
+      referrer: ref,
+      selectedModel: active,
+      pinnedModel: modelPinned,
+      endpoints,
+      jsonMode,
+      url,
+      ua,
+      serviceWorker: sw,
+      conversationLength: convoLen,
+      lastRequests: recent,
+      tts,
+      ...extra,
+    };
+    if (!showPayloads) {
+      // Redact verbose details
+      const redacted = JSON.parse(JSON.stringify(payload));
+      if (Array.isArray(redacted.lastRequests)) {
+        redacted.lastRequests = redacted.lastRequests.map(entry => {
+          const e = { ...entry };
+          if (e.meta && typeof e.meta === 'object') {
+            // keep only high-level meta flags
+            e.meta = {
+              ...('endpoint' in e.meta ? { endpoint: e.meta.endpoint } : {}),
+              ...('json' in e.meta ? { json: e.meta.json } : {}),
+              ...('has_tools' in e.meta ? { has_tools: e.meta.has_tools } : {}),
+              ...('tool_count' in e.meta ? { tool_count: e.meta.tool_count } : {}),
+            };
+          }
+          // trim noisy fields
+          delete e.prompt; delete e.payload; delete e.body;
+          return e;
+        });
+      }
+      debugEl.textContent = JSON.stringify(redacted, null, 2);
+    } else {
+      debugEl.textContent = JSON.stringify(payload, null, 2);
+    }
   }
-}
 
-const els = {
-  form: document.querySelector('#chatForm'),
-  input: document.querySelector('#promptInput'),
-  messages: document.querySelector('#messages'),
-  modelSelect: document.querySelector('#modelSelect'),
-  voiceSelect: document.querySelector('#voiceSelect'),
-  status: document.querySelector('#status'),
-  voiceButton: document.querySelector('#voiceButton'),
-  sendButton: document.querySelector('#sendButton'),
-  voicePlayback: document.querySelector('#voicePlayback'),
-};
+  // Fast-path streaming for text-only prompts to improve perceived latency
+  async function sendPromptStreaming(prompt) {
+    const selectedModel = getSelectedModel();
+    if (!selectedModel) throw new Error('No model selected.');
+    if (!client) throw new Error('Pollinations client is not ready.');
+    const endpoints = buildEndpointSequence(selectedModel);
+    if (!endpoints.length) throw new Error(`No endpoints available for model "${selectedModel.label ?? selectedModel.id}".`);
 
-els.modelSelect.disabled = true;
-els.voiceSelect.disabled = true;
-if (els.voicePlayback) {
-  els.voicePlayback.disabled = true;
-  els.voicePlayback.checked = false;
-}
-
-const state = {
-  conversation: [],
-  messages: [],
-  loading: false,
-  models: [],
-  activeModel: null,
-  pinnedModelId: null,
-  imagePrimerSent: false,
-  voicePlayback: false,
-  statusMessage: DEFAULT_STATUS,
-  statusError: false,
-};
-
-let messageIdCounter = 0;
-let recognition = null;
-let recognizing = false;
-let recognitionSilenceTimer = null;
-let recognitionBaseText = '';
-let recognitionFinalText = '';
-let playbackStatusTimer = null;
-const trackedAudioUrls = new Set();
-
-function setStatus(message = DEFAULT_STATUS, options = {}) {
-  const { error = false } = options;
-  const text = message && message.length ? message : DEFAULT_STATUS;
-  if (playbackStatusTimer) {
-    clearTimeout(playbackStatusTimer);
-    playbackStatusTimer = null;
+    const startingLength = state.conversation.length;
+    // Do NOT inject the JSON primer for streaming text-only turns
+    state.conversation.push({ role: 'user', content: prompt });
+    try {
+      setStatus('Streaming response…');
+      const assistantMsg = addMessage({ role: 'assistant', type: 'text', content: '' });
+      const pinnedId = state.pinnedModelId || selectedModel.id;
+      const endpoint = endpoints[0] || 'openai';
+      state.activeModel = { id: pinnedId, endpoint, info: selectedModel };
+      if (!state.pinnedModelId) state.pinnedModelId = pinnedId;
+      let streamed = '';
+      let rafScheduled = false;
+      const scheduleRender = () => {
+        if (rafScheduled) return;
+        rafScheduled = true;
+        const run = () => {
+          rafScheduled = false;
+          renderMessages();
+        };
+        if (typeof requestAnimationFrame === 'function') {
+          requestAnimationFrame(run);
+        } else {
+          setTimeout(run, 50);
+        }
+      };
+      try {
+        // Do not include 'seed' for text chat; OpenAI route rejects it
+        for await (const chunk of chatStream({ model: pinnedId, endpoint, messages: state.conversation }, client)) {
+          if (typeof chunk === 'string' && chunk) {
+            streamed += chunk;
+            assistantMsg.content = streamed;
+            scheduleRender();
+          }
+        }
+      } catch (e) {
+        // Fallback to existing non-stream flow
+        console.warn('Streaming failed; falling back to standard request', e);
+        state.conversation.length = startingLength; // revert user injection
+        return await sendPrompt(prompt);
+      }
+      if (streamed.trim()) {
+        state.conversation.push({ role: 'assistant', content: streamed });
+        renderMessages();
+        if (state.voicePlayback && els.voiceSelect.value) {
+          void speakMessage(assistantMsg, { autoplay: true });
+        }
+      }
+      resetStatusIfIdle();
+    } catch (error) {
+      console.error('Chat error (streaming)', error);
+      state.conversation.length = startingLength;
+      throw error;
+    }
   }
-  state.statusMessage = text;
-  state.statusError = !!error;
-  els.status.textContent = text;
-  els.status.classList.toggle('error', !!error);
-}
 
-function resetStatusIfIdle() {
-  if (!state.statusError && !state.loading && !recognizing) {
-    setStatus(DEFAULT_STATUS);
+  async function copyLogsToClipboard() {
+    try {
+      const data = (globalThis && globalThis.__PANEL_LOG__) || [];
+      const payload = { when: new Date().toISOString(), data };
+      await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+      setStatus('Diagnostics copied to clipboard.');
+      setTimeout(() => resetStatusIfIdle(), 1500);
+    } catch (e) {
+      console.warn('Copy failed', e);
+      setStatus('Unable to copy diagnostics.', { error: true });
+    }
   }
-}
 
-function setLoading(isLoading) {
-  state.loading = isLoading;
-  els.sendButton.disabled = isLoading;
-  els.voiceButton.disabled = isLoading && !recognizing;
-  els.input.disabled = isLoading && !recognizing;
-  els.form.classList.toggle('loading', isLoading);
-  if (!isLoading) {
-    resetStatusIfIdle();
+  function clearPanelLogs() {
+    try {
+      const log = (globalThis && globalThis.__PANEL_LOG__);
+      if (log && Array.isArray(log)) log.length = 0;
+      renderDebugPanel();
+      setStatus('Diagnostics cleared.');
+      setTimeout(() => resetStatusIfIdle(), 1200);
+    } catch (e) {
+      console.warn('Clear logs failed', e);
+    }
   }
-}
 
-function safeJsonParse(text) {
-  if (text == null) return null;
-  try {
-    return JSON.parse(String(text));
-  } catch { return null; }
-}
+  async function runHealthCheck() {
+    try {
+      const model = getSelectedModel();
+      if (!model) throw new Error('No model selected.');
+      if (!client) throw new Error('Client not ready.');
+      setStatus('Running health check…');
+      const messages = [{ role: 'user', content: 'Return the word OK.' }];
+      const payload = { model: model.id, endpoint: 'openai', messages, response_format: { type: 'json_object' } };
+      const started = Date.now();
+      const resp = await chat(payload, client);
+      const ms = Date.now() - started;
+      const ok = Array.isArray(resp?.choices) && (resp.choices[0]?.message?.content ?? '').length >= 2;
+      renderDebugPanel({ health: { ok, ms, model: model.id } });
+      setStatus(ok ? `Health OK (${ms} ms).` : `Health failed (${ms} ms).`, { error: !ok });
+      setTimeout(() => resetStatusIfIdle(), 1500);
+    } catch (e) {
+      console.warn('Health check failed', e);
+      renderDebugPanel({ health: { ok: false, error: e?.message || String(e) } });
+      setStatus('Health check failed: ' + (e?.message || String(e)), { error: true });
+    }
+  }
 
-// Attempt to parse slightly malformed JSON often produced by models.
-// - Strips code fences and language tags if present
-// - Removes line and block comments
-// - Replaces smart quotes with standard quotes
+  const els = {
+    form: document.querySelector('#chatForm'),
+    input: document.querySelector('#promptInput'),
+    messages: document.querySelector('#messages'),
+    modelSelect: document.querySelector('#modelSelect'),
+    voiceSelect: document.querySelector('#voiceSelect'),
+    status: document.querySelector('#status'),
+    voiceButton: document.querySelector('#voiceButton'),
+    sendButton: document.querySelector('#sendButton'),
+    voicePlayback: document.querySelector('#voicePlayback'),
+  };
+
+  els.modelSelect.disabled = true;
+  els.voiceSelect.disabled = true;
+  if (els.voicePlayback) {
+    els.voicePlayback.disabled = true;
+    els.voicePlayback.checked = false;
+  }
+
+  const state = {
+    conversation: [],
+    messages: [],
+    loading: false,
+    models: [],
+    activeModel: null,
+    pinnedModelId: null,
+    imagePrimerSent: false,
+    voicePlayback: false,
+    statusMessage: DEFAULT_STATUS,
+    statusError: false,
+  };
+
+  let messageIdCounter = 0;
+  let recognition = null;
+  let recognizing = false;
+  let recognitionSilenceTimer = null;
+  let recognitionBaseText = '';
+  let recognitionFinalText = '';
+  let playbackStatusTimer = null;
+  const trackedAudioUrls = new Set();
+
+  function setStatus(message = DEFAULT_STATUS, options = {}) {
+    const { error = false } = options;
+    const text = message && message.length ? message : DEFAULT_STATUS;
+    if (playbackStatusTimer) {
+      clearTimeout(playbackStatusTimer);
+      playbackStatusTimer = null;
+    }
+    state.statusMessage = text;
+    state.statusError = !!error;
+    els.status.textContent = text;
+    els.status.classList.toggle('error', !!error);
+  }
+
+  function resetStatusIfIdle() {
+    if (!state.statusError && !state.loading && !recognizing) {
+      setStatus(DEFAULT_STATUS);
+    }
+  }
+
+  function setLoading(isLoading) {
+    state.loading = isLoading;
+    els.sendButton.disabled = isLoading;
+    els.voiceButton.disabled = isLoading && !recognizing;
+    els.input.disabled = isLoading && !recognizing;
+    els.form.classList.toggle('loading', isLoading);
+    if (!isLoading) {
+      resetStatusIfIdle();
+    }
+  }
+
+  function safeJsonParse(text) {
+    if (text == null) return null;
+    try {
+      return JSON.parse(String(text));
+    } catch { return null; }
+  }
+
+  // Attempt to parse slightly malformed JSON often produced by models.
+  // - Strips code fences and language tags if present
+  // - Removes line and block comments
+  // - Replaces smart quotes with standard quotes
 // - Removes trailing commas before } or ]
 function __unused_looseJsonParse(text) {
   if (text == null) return null;
@@ -2579,12 +2621,17 @@ initializeApp().catch(error => {
   setStatus(message, { error: true });
 });
 
-window.addEventListener('beforeunload', () => {
-  if (recognizing) {
-    stopRecognition();
-  }
-  for (const url of trackedAudioUrls) {
-    URL.revokeObjectURL(url);
-  }
-  trackedAudioUrls.clear();
-});
+  window.addEventListener('beforeunload', () => {
+    if (recognizing) {
+      stopRecognition();
+    }
+    for (const url of trackedAudioUrls) {
+      URL.revokeObjectURL(url);
+    }
+    trackedAudioUrls.clear();
+  });
+}
+
+if (!redirectedToMobile) {
+  initializeDesktopApp();
+}

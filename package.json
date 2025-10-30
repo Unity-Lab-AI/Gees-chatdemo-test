@@ -5,9 +5,9 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
+    "dev": "vite --config demo2/vite.config.mjs",
+    "build": "vite build --config demo2/vite.config.mjs",
+    "preview": "vite preview --config demo2/vite.config.mjs",
     "test": "node tools/run-tests.mjs"
   },
   "repository": {
