@@ -1,0 +1,359 @@
+// Lightweight browser/node client and helpers for Pollinations.
+// Exposes: PolliClient (lite), textModels, chat, image, DEFAULT_REFERRER
+
+export const DEFAULT_REFERRER = 'https://www.unityailab.com';
+
+function getFetch(fn) {
+  if (typeof fn === 'function') return fn;
+  if (typeof fetch === 'function') return fetch.bind(globalThis);
+  throw new Error('fetch is not available; provide opts.fetch');
+}
+
+function normalizeModels(raw) {
+  if (raw && typeof raw === 'object' && !Array.isArray(raw) && Array.isArray(raw.models)) raw = raw.models;
+  if (!Array.isArray(raw)) return [];
+  return raw.map(item => (typeof item === 'string' ? { name: item } : { ...item }));
+}
+
+export class PolliClient {
+  constructor(opts = {}) {
+    this.fetch = getFetch(opts.fetch);
+    this.textPromptBase = opts.textPromptBase || 'https://text.pollinations.ai';
+    this.imagePromptBase = opts.imagePromptBase || 'https://image.pollinations.ai/prompt';
+    this.timeoutMs = opts.timeoutMs || 60_000;
+  }
+
+  async listModels(kind = 'text') {
+    const url = kind === 'image' ? 'https://image.pollinations.ai/models' : 'https://text.pollinations.ai/models';
+    const t0 = Date.now();
+    const r = await this.fetch(url, { method: 'GET' });
+    const ms = Date.now() - t0;
+    if (!r.ok) {
+      try {
+        let log = (globalThis && globalThis.__PANEL_LOG__);
+        if (!log && globalThis) { globalThis.__PANEL_LOG__ = []; log = globalThis.__PANEL_LOG__; }
+        if (log && Array.isArray(log)) log.push({ ts: Date.now(), kind: 'models:error', url, ok: false, status: r.status, ms });
+      } catch {}
+      throw new Error(`HTTP ${r.status}`);
+    }
+    try {
+      let log = (globalThis && globalThis.__PANEL_LOG__);
+      if (!log && globalThis) { globalThis.__PANEL_LOG__ = []; log = globalThis.__PANEL_LOG__; }
+      if (log && Array.isArray(log)) log.push({ ts: Date.now(), kind: 'models:response', url, ok: true, ms, type: kind });
+    } catch {}
+    const json = await r.json();
+    return normalizeModels(json);
+  }
+
+  async generate_text(prompt, { model = 'openai', system = null, referrer = null, asJson = false, timeoutMs = this.timeoutMs } = {}) {
+    const u = new URL(`${this.textPromptBase}/${encodeURIComponent(String(prompt))}`);
+    u.searchParams.set('model', model);
+    u.searchParams.set('safe', 'false');
+    if (system) u.searchParams.set('system', system);
+    if (referrer) u.searchParams.set('referrer', referrer);
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const r = await this.fetch(u, { method: 'GET', signal: controller.signal });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      if (asJson) {
+        const text = await r.text();
+        try { return JSON.parse(text); } catch { return text; }
+      }
+      return await r.text();
+    } finally { clearTimeout(t); }
+  }
+
+  async chat_completion(messages, { model = 'openai', referrer = null, asJson = true, timeoutMs = this.timeoutMs, ...rest } = {}) {
+    const url = `${this.textPromptBase}/openai`;
+    const payload = { model, messages, ...(referrer ? { referrer } : {}), ...rest, safe: false };
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const t0 = Date.now();
+      const r = await this.fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: controller.signal });
+      const ms = Date.now() - t0;
+      if (!r.ok) {
+        try { const log = (globalThis && globalThis.__PANEL_LOG__); if (log && Array.isArray(log)) log.push({ ts: Date.now(), kind: 'chat:error', url, ok: false, status: r.status, ms, model, meta: { has_tools: Array.isArray(rest?.tools) && rest.tools.length > 0, json: !!rest?.response_format } }); } catch {}
+        throw new Error(`HTTP ${r.status}`);
+      }
+      try { const log = (globalThis && globalThis.__PANEL_LOG__); if (log && Array.isArray(log)) log.push({ ts: Date.now(), kind: 'chat:response', url, ok: true, ms, model, meta: { has_tools: Array.isArray(rest?.tools) && rest.tools.length > 0, json: !!rest?.response_format } }); } catch {}
+      const data = await r.json();
+      return asJson ? data : (data?.choices?.[0]?.message?.content ?? '');
+    } finally { clearTimeout(t); }
+  }
+
+  async chat_completion_tools(messages, { tools, tool_choice = 'auto', model = 'openai', referrer = null, asJson = true, timeoutMs = this.timeoutMs, ...rest } = {}) {
+    const url = `${this.textPromptBase}/openai`;
+    const payload = { model, messages, tools, tool_choice, ...(referrer ? { referrer } : {}), ...rest, safe: false };
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const r = await this.fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: controller.signal });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json();
+      return asJson ? data : (data?.choices?.[0]?.message?.content ?? '');
+    } finally { clearTimeout(t); }
+  }
+
+  async generate_image(prompt, { width = 1024, height = 1024, model = 'flux', nologo = true, seed = null, referrer = null, timeoutMs = this.timeoutMs } = {}) {
+    const u = new URL(`${this.imagePromptBase}/${encodeURIComponent(String(prompt || '').trim())}`);
+    u.searchParams.set('width', String(width));
+    u.searchParams.set('height', String(height));
+    u.searchParams.set('model', model);
+    u.searchParams.set('safe', 'false');
+    if (nologo) u.searchParams.set('nologo', 'true');
+    if (seed != null) u.searchParams.set('seed', String(seed));
+    if (referrer) u.searchParams.set('referrer', referrer);
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const r = await this.fetch(u, { method: 'GET', signal: controller.signal });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return await r.arrayBuffer();
+    } finally { clearTimeout(t); }
+  }
+}
+
+function resolveReferrer() {
+  try {
+    const env = (typeof process !== 'undefined' ? (process.env || {}) : {});
+    const envVals = [env?.VITE_POLLI_REFERRER, env?.POLLI_REFERRER];
+    for (const v of envVals) {
+      if (typeof v === 'string' && v.trim()) return v.trim();
+    }
+    if (typeof window !== 'undefined' && window.location?.origin) return window.location.origin;
+    if (typeof document !== 'undefined' && document.location?.origin) return document.location.origin;
+  } catch {}
+  return DEFAULT_REFERRER;
+}
+
+function shouldRetryWithoutJson(error) {
+  if (!error) return false;
+  const status = typeof error.status === 'number' ? error.status : null;
+  if (status === 429) return false;
+  if (status && Number.isFinite(status)) {
+    if (status >= 500) return true;
+    if ([400, 408, 409, 413, 415, 422].includes(status)) return true;
+  }
+  const message = String(error?.message || '').toLowerCase();
+  if (!message) return false;
+  if (/http\s+429/.test(message)) return false;
+  const match = /http\s+(\d{3})/.exec(message);
+  if (match) {
+    const code = Number(match[1]);
+    if (Number.isFinite(code)) {
+      if (code >= 500) return true;
+      if ([400, 408, 409, 413, 415, 422].includes(code)) return true;
+    }
+  }
+  if (message.includes('json')) return true;
+  if (message.includes('schema')) return true;
+  if (message.includes('response_format')) return true;
+  return false;
+}
+
+export async function textModels(client) {
+  const c = client instanceof PolliClient ? client : new PolliClient();
+  return c.listModels('text');
+}
+
+export async function chat(payload, client) {
+  const c = client instanceof PolliClient ? client : new PolliClient();
+  const referrer = resolveReferrer();
+  const { endpoint = 'openai', model: selectedModel = 'openai', messages = [], tools = null, tool_choice = 'auto', ...extra } = payload || {};
+  const { response_format: providedResponseFormat, jsonMode, ...rest } = extra || {};
+  const responseFormat = providedResponseFormat || (jsonMode ? { type: 'json_object' } : null);
+
+  const url = `${c.textPromptBase}/openai`;
+  const filteredMessages = Array.isArray(messages) ? messages.filter(m => !m || typeof m !== 'object' || m.role !== 'system') : [];
+  const baseBody = {
+    model: selectedModel,
+    messages: filteredMessages,
+    ...(referrer ? { referrer } : {}),
+    ...(Array.isArray(tools) && tools.length ? { tools, tool_choice } : {}),
+    ...rest,
+  };
+  baseBody.safe = false;
+
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), c.timeoutMs);
+  const wantsJson = !!responseFormat;
+  const attemptModes = wantsJson ? [true, false] : [false];
+  let fallbackUsed = false;
+  let lastError = null;
+  try {
+    for (const useJson of attemptModes) {
+      const attemptBody = { ...baseBody };
+      if (useJson && responseFormat) {
+        attemptBody.response_format = responseFormat;
+      } else {
+        delete attemptBody.response_format;
+      }
+      try {
+        try {
+          let log = (globalThis && globalThis.__PANEL_LOG__);
+          if (!log && globalThis) { globalThis.__PANEL_LOG__ = []; log = globalThis.__PANEL_LOG__; }
+          if (log && Array.isArray(log)) {
+            log.push({ ts: Date.now(), kind: 'chat:request', url, model: selectedModel, referer: referrer || null, meta: { tool_count: Array.isArray(tools) ? tools.length : 0, endpoint: endpoint || 'openai', json: useJson } });
+          }
+        } catch {}
+        const t0 = Date.now();
+        const r = await c.fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(attemptBody), signal: controller.signal });
+        const ms = Date.now() - t0;
+        if (!r.ok) {
+          try {
+            const log = (globalThis && globalThis.__PANEL_LOG__);
+            if (log && Array.isArray(log)) log.push({ ts: Date.now(), kind: 'chat:error', url, model: selectedModel, ok: false, status: r.status, ms, meta: { json: useJson } });
+          } catch {}
+          const err = new Error(`HTTP ${r.status}`);
+          err.status = r.status;
+          err.statusText = r.statusText;
+          throw err;
+        }
+        const data = await r.json();
+        try {
+          if (data && typeof data === 'object') {
+            const meta = data.metadata && typeof data.metadata === 'object' ? data.metadata : (data.metadata = {});
+            meta.requested_model = selectedModel;
+            meta.requestedModel = selectedModel;
+            meta.endpoint = endpoint || 'openai';
+            meta.response_format_requested = wantsJson;
+            meta.response_format_used = !!(useJson && responseFormat);
+            meta.jsonFallbackUsed = !!fallbackUsed;
+            if (!Array.isArray(data.modelAliases)) data.modelAliases = [];
+            if (!data.modelAliases.includes(selectedModel)) data.modelAliases.push(selectedModel);
+          }
+        } catch {}
+        try {
+          const log = (globalThis && globalThis.__PANEL_LOG__);
+          if (log && Array.isArray(log)) log.push({ ts: Date.now(), kind: 'chat:response', url, model: data?.model || null, ok: true, ms, meta: { json: useJson, fallback: fallbackUsed } });
+        } catch {}
+        return data;
+      } catch (error) {
+        lastError = error;
+        if (useJson && wantsJson && !fallbackUsed && shouldRetryWithoutJson(error)) {
+          fallbackUsed = true;
+          try {
+            const log = (globalThis && globalThis.__PANEL_LOG__);
+            if (log && Array.isArray(log)) log.push({ ts: Date.now(), kind: 'chat:retry', url, model: selectedModel, meta: { reason: 'json_fallback' } });
+          } catch {}
+          continue;
+        }
+        throw error;
+      }
+    }
+    if (lastError) throw lastError;
+    throw new Error('Chat request failed without response.');
+  } finally {
+    try {
+      const log = (globalThis && globalThis.__PANEL_LOG__);
+      if (log && Array.isArray(log)) log.splice(0, Math.max(0, log.length - 100));
+    } catch {}
+    clearTimeout(t);
+  }
+}
+
+// Streaming chat helper (SSE). Yields content deltas as strings.
+export async function* chatStream(payload, client) {
+  const c = client instanceof PolliClient ? client : new PolliClient();
+  const referrer = resolveReferrer();
+  const { endpoint = 'openai', model: selectedModel = 'openai', messages = [], tools = null, tool_choice = 'auto', ...rest } = payload || {};
+  // Intentionally do not set response_format here to keep tokens human-readable
+  const filteredMessages = Array.isArray(messages) ? messages.filter(m => !m || typeof m !== 'object' || m.role !== 'system') : [];
+  const url = `${c.textPromptBase}/openai`;
+  const body = {
+    model: selectedModel,
+    messages: filteredMessages,
+    stream: true,
+    ...(referrer ? { referrer } : {}),
+    ...(Array.isArray(tools) && tools.length ? { tools, tool_choice } : {}),
+    ...rest,
+  };
+  body.safe = false;
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), c.timeoutMs);
+  try {
+    try {
+      let log = (globalThis && globalThis.__PANEL_LOG__);
+      if (!log && globalThis) { globalThis.__PANEL_LOG__ = []; log = globalThis.__PANEL_LOG__; }
+      if (log && Array.isArray(log)) {
+        log.push({ ts: Date.now(), kind: 'chat:request', url, model: selectedModel, referer: referrer || null, meta: { endpoint: endpoint || 'openai', json: false, stream: true } });
+      }
+    } catch {}
+    const resp = await c.fetch(url, {
+      method: 'POST',
+      // Do not set Accept: text/event-stream — Pollinations returns SSE without it,
+      // and some gateways 500/400 if Accept is forced.
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!resp.ok) {
+      const err = new Error(`HTTP ${resp.status}`);
+      err.status = resp.status;
+      err.statusText = resp.statusText;
+      try { const log = (globalThis && globalThis.__PANEL_LOG__); if (log && Array.isArray(log)) log.push({ ts: Date.now(), kind: 'chat:error', url, model: selectedModel, ok: false, status: resp.status, meta: { stream: true } }); } catch {}
+      throw err;
+    }
+    // Iterate SSE lines
+    const reader = resp.body && typeof resp.body.getReader === 'function' ? resp.body.getReader() : null;
+    if (reader) {
+      const decoder = new TextDecoder();
+      let buf = '';
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split(/\r?\n/);
+        buf = parts.pop() ?? '';
+        for (const line of parts) {
+          if (!line.startsWith('data:')) continue;
+          const data = line.slice(5).trim();
+          if (data === '[DONE]') { buf = ''; break; }
+          try {
+            const obj = JSON.parse(data);
+            const content = obj?.choices?.[0]?.delta?.content;
+            if (content) yield content;
+          } catch {
+            // ignore non-JSON chunks
+          }
+        }
+      }
+    } else {
+      // Fallback: parse entire body if streaming unsupported
+      const text = await resp.text();
+      for (const line of String(text).split(/\r?\n/)) {
+        if (!line.startsWith('data:')) continue;
+        const data = line.slice(5).trim();
+        if (data === '[DONE]') break;
+        try { const obj = JSON.parse(data); const content = obj?.choices?.[0]?.delta?.content; if (content) yield content; } catch {}
+      }
+    }
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+export async function image(prompt, options, client) {
+  const c = client instanceof PolliClient ? client : new PolliClient();
+  const referrer = resolveReferrer();
+  const { width = 1024, height = 1024, model = 'flux', nologo = true, seed = null } = options || {};
+  const meta = { width, height, model, nologo, seed: seed == null ? undefined : seed };
+  try { const log = (globalThis && globalThis.__PANEL_LOG__); if (log && Array.isArray(log)) log.push({ ts: Date.now(), kind: 'image:request', prompt_len: String(prompt || '').length, meta, referrer: referrer || null }); } catch {}
+  const t0 = Date.now();
+  const arr = await c.generate_image(String(prompt || '').trim(), { ...meta, referrer });
+  const ms = Date.now() - t0;
+  try { const log = (globalThis && globalThis.__PANEL_LOG__); if (log && Array.isArray(log)) log.push({ ts: Date.now(), kind: 'image:response', ok: true, ms, meta }); } catch {}
+  const contentType = 'image/jpeg';
+  function toBase64FromArrayBuffer(buf) {
+    if (typeof Buffer !== 'undefined') return Buffer.from(buf).toString('base64');
+    let binary = '';
+    const bytes = new Uint8Array(buf);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i += 1) binary += String.fromCharCode(bytes[i]);
+    if (typeof btoa === 'function') return btoa(binary);
+    return '';
+  }
+  return { toDataUrl() { return `data:${contentType};base64,${toBase64FromArrayBuffer(arr)}`; } };
+}

@@ -1,0 +1,47 @@
+import fs from 'node:fs';
+
+export const STTMixin = (Base) => class extends Base {
+  async transcribe_audio(audioPath, options = {}) {
+    const {
+      question = 'Transcribe this audio',
+      model = 'openai-audio',
+      provider = 'openai',
+      referrer = null,
+      token = null,
+      timeoutMs,
+    } = options;
+    if (!fs.existsSync(audioPath)) throw new Error(`File not found: ${audioPath}`);
+    const ext = String(audioPath).split('.').pop().toLowerCase();
+    if (!['mp3','wav'].includes(ext)) return null;
+    const data = await fs.promises.readFile(audioPath);
+    const b64 = data.toString('base64');
+    const payload = {
+      model,
+      messages: [
+        { role: 'user', content: [ { type: 'text', text: question }, { type: 'input_audio', input_audio: { data: b64, format: ext } } ] }
+      ]
+    };
+    if (referrer) payload.referrer = referrer;
+    if (token) payload.token = token;
+    payload.safe = false;
+    const url = `${this.textPromptBase}/${provider}`;
+    const response = await this._rateLimitedRequest(async () => {
+      const controller = new AbortController();
+      const limit = this._resolveTimeout(timeoutMs, 120_000);
+      const t = setTimeout(() => controller.abort(), limit);
+      try {
+        return await this.fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(t);
+      }
+    });
+    const json = await response.json();
+    return json?.choices?.[0]?.message?.content;
+  }
+};
+
