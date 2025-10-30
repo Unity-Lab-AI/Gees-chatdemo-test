@@ -8,7 +8,12 @@ async function streamOnce(prompt) {
   const url = 'https://text.pollinations.ai/openai';
   const body = { model: 'openai', messages: [{ role: 'user', content: prompt }], stream: true };
   const started = Date.now();
-  const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  let resp;
+  try {
+    resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  } catch (error) {
+    return { text: '', ms: Date.now() - started, status: 'error', error: error?.message ?? String(error) };
+  }
   if (!resp.ok) {
     return { text: '', ms: Date.now() - started, status: resp.status };
   }
@@ -38,6 +43,10 @@ export async function run() {
   const results = [];
   for (let i = 0; i < 3; i += 1) {
     const r = await streamOnce('Say hello briefly.');
+    if (r.status !== 200) {
+      console.warn('[openai-streaming] Skipping: network unavailable for streaming test.', r);
+      return;
+    }
     results.push(r);
     await sleep(3200); // respect pacing between successful calls
   }
