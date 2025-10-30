@@ -142,6 +142,64 @@ footer.controls .buttons {
   justify-content: flex-end;
 }
 
+footer.controls .voice-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+footer.controls .voice-controls .select {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 220px;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+footer.controls .voice-controls .select span {
+  font-weight: 600;
+  color: #0f172a;
+  font-size: 0.9rem;
+}
+
+footer.controls .voice-controls .select select {
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  background: #fff;
+}
+
+footer.controls .voice-controls .select select:focus {
+  outline: 2px solid rgba(45, 76, 200, 0.35);
+  border-color: rgba(45, 76, 200, 0.6);
+}
+
+footer.controls .voice-controls .toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+footer.controls .voice-controls .toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+footer.controls .voice-controls .toggle span {
+  font-size: 0.95rem;
+}
+
 button.primary,
 button.secondary,
 button.mic {
@@ -197,6 +255,25 @@ button:disabled {
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
+}
+
+@media (max-width: 640px) {
+  #app {
+    padding: 16px;
+  }
+
+  footer.controls .voice-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  footer.controls .voice-controls .toggle {
+    justify-content: flex-start;
+  }
+
+  footer.controls .buttons {
+    justify-content: center;
+  }
 }
 
 p.hint {

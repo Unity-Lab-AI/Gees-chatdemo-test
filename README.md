@@ -11,6 +11,7 @@ built-in browser speech synthesis.
 - Text fallback with keyboard shortcut (`Ctrl`/`Cmd` + `Enter`) for quick
   submission.
 - Spoken responses with automatic truncation for lengthy answers.
+- Adjustable speech playback with selectable voices and a toggle for automatic narration (remembered across sessions).
 - Clear conversation control for fresh sessions.
 - Static build suitable for GitHub Pages deployment.
 

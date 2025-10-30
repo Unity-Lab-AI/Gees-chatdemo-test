@@ -18,6 +18,16 @@ const hasMediaDevices = Boolean(
 );
 const voiceInputSupported = Boolean(SpeechRecognition && hasMediaDevices);
 const voicePlaybackSupported = Boolean(speechSynth && SpeechSynthesisUtteranceCtor);
+const SETTINGS_STORAGE_KEY = 'polli-voice-preferences';
+const storage = (() => {
+  if (!hasWindow) return null;
+  try {
+    return window.localStorage || null;
+  } catch (error) {
+    console.warn('Local storage unavailable for voice preferences.', error);
+    return null;
+  }
+})();
 const TTS_CHUNK_MAX_CHARS = 250;
 const voiceInputUnsupportedMessage = !SpeechRecognition
   ? 'Voice input is not supported in this browser. You can still type messages.'
@@ -43,13 +53,26 @@ app.innerHTML = `
       </div>
     </header>
     <section class="conversation" id="conversation" aria-live="polite" aria-label="Conversation transcript"></section>
-    <footer class="controls">
+  <footer class="controls">
       <textarea id="promptInput" placeholder="Type a message or use the microphone" aria-label="Message"></textarea>
+      <div class="voice-controls" id="voiceControls">
+        <label class="select" for="voiceSelect">
+          <span>Assistant voice</span>
+          <select id="voiceSelect" aria-label="Assistant voice">
+            <option value="">System default</option>
+          </select>
+        </label>
+        <label class="toggle" for="autoSpeakToggle">
+          <input type="checkbox" id="autoSpeakToggle" checked />
+          <span>Speak replies automatically</span>
+        </label>
+      </div>
       <div class="buttons">
         <button class="mic" id="micButton" type="button">
           <span aria-hidden="true">🎙️</span>
           <span id="micLabel">Start listening</span>
         </button>
+        <button class="secondary" id="playSpeakingButton" type="button">Replay last reply</button>
         <button class="secondary" id="stopSpeakingButton" type="button">Stop voice</button>
         <button class="primary" id="sendButton" type="button">Send message</button>
       </div>
@@ -67,6 +90,10 @@ const els = {
   send: document.getElementById('sendButton'),
   reset: document.getElementById('resetButton'),
   stopVoice: document.getElementById('stopSpeakingButton'),
+  playVoice: document.getElementById('playSpeakingButton'),
+  voiceSelect: document.getElementById('voiceSelect'),
+  autoSpeakToggle: document.getElementById('autoSpeakToggle'),
+  voiceControls: document.getElementById('voiceControls'),
   supportHint: document.getElementById('supportHint'),
 };
 
@@ -76,6 +103,8 @@ const state = {
   pending: false,
   recognition: null,
   typedBeforeMic: '',
+  autoSpeak: true,
+  lastAssistantMessage: '',
   voiceInputSupported,
   voicePlaybackSupported,
   voiceInputUnsupportedMessage,
@@ -84,7 +113,90 @@ const state = {
 const voiceState = {
   queue: [],
   current: null,
+  voices: [],
+  selectedVoiceId: null,
 };
+
+function computeVoiceId(voice) {
+  if (!voice) return '';
+  return voice.voiceURI || `${voice.name || 'voice'}::${voice.lang || 'unknown'}`;
+}
+
+function loadSettings() {
+  if (!storage) return;
+  try {
+    const raw = storage.getItem(SETTINGS_STORAGE_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (typeof data.autoSpeak === 'boolean') {
+      state.autoSpeak = data.autoSpeak;
+    }
+    if (typeof data.selectedVoiceId === 'string' && data.selectedVoiceId) {
+      voiceState.selectedVoiceId = data.selectedVoiceId;
+    }
+  } catch (error) {
+    console.warn('Unable to load saved voice preferences.', error);
+  }
+}
+
+function persistSettings() {
+  if (!storage) return;
+  try {
+    const payload = {
+      autoSpeak: !!state.autoSpeak,
+      selectedVoiceId: voiceState.selectedVoiceId || '',
+    };
+    storage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(payload));
+  } catch (error) {
+    console.warn('Unable to store voice preferences.', error);
+  }
+}
+
+function refreshPlayButton() {
+  if (!els.playVoice) return;
+  const hasMessage = typeof state.lastAssistantMessage === 'string' && state.lastAssistantMessage.trim().length > 0;
+  const enabled = state.voicePlaybackSupported && hasMessage;
+  els.playVoice.disabled = !enabled;
+  if (state.voicePlaybackSupported) {
+    els.playVoice.title = enabled
+      ? 'Replay the latest assistant reply.'
+      : 'Replay is available once the assistant responds.';
+  }
+}
+
+function populateVoiceOptions() {
+  if (!els.voiceSelect) return;
+  if (!state.voicePlaybackSupported) {
+    els.voiceSelect.innerHTML = '<option value="">Voice playback unavailable</option>';
+    els.voiceSelect.disabled = true;
+    return;
+  }
+  els.voiceSelect.disabled = false;
+  const voices = speechSynth.getVoices();
+  voiceState.voices = Array.isArray(voices) ? voices.slice() : [];
+  const hadVoices = voiceState.voices.length > 0;
+  const options = [
+    '<option value="">System default</option>',
+    ...voiceState.voices.map((voice) => {
+      const id = computeVoiceId(voice);
+      const label = `${escapeHtml(voice.name)} (${escapeHtml(voice.lang || 'unknown')}${voice.default ? ' • default' : ''})`;
+      const selected = voiceState.selectedVoiceId === id ? ' selected' : '';
+      return `<option value="${escapeHtml(id)}"${selected}>${label}</option>`;
+    }),
+  ];
+  els.voiceSelect.innerHTML = options.join('');
+  if (voiceState.selectedVoiceId && hadVoices && !voiceState.voices.some(v => computeVoiceId(v) === voiceState.selectedVoiceId)) {
+    voiceState.selectedVoiceId = null;
+    persistSettings();
+  }
+  if (voiceState.selectedVoiceId && voiceState.voices.some(v => computeVoiceId(v) === voiceState.selectedVoiceId)) {
+    els.voiceSelect.value = voiceState.selectedVoiceId;
+  } else {
+    els.voiceSelect.value = '';
+  }
+}
+
+loadSettings();
 
 function buildTtsChunks(text, { maxChars = TTS_CHUNK_MAX_CHARS } = {}) {
   if (!text) return [];
@@ -162,6 +274,15 @@ function setPending(pending) {
 function speakChunk(chunk) {
   if (!chunk) return;
   const utterance = new SpeechSynthesisUtteranceCtor(chunk);
+  if (voiceState.selectedVoiceId) {
+    const target = voiceState.voices.find(v => computeVoiceId(v) === voiceState.selectedVoiceId);
+    if (target) {
+      utterance.voice = target;
+      if (target.lang) {
+        utterance.lang = target.lang;
+      }
+    }
+  }
   utterance.rate = 1;
   utterance.pitch = 1;
   utterance.onend = () => {
@@ -222,9 +343,15 @@ async function sendMessage(rawText) {
     const reply = response?.choices?.[0]?.message?.content;
     if (reply) {
       state.conversation = pushMessage(state.conversation, 'assistant', reply);
+      state.lastAssistantMessage = reply;
       renderConversation();
-      startVoicePlaybackForMessage(reply);
-      setStatus('Assistant reply ready.');
+      refreshPlayButton();
+      if (state.voicePlaybackSupported && state.autoSpeak) {
+        startVoicePlaybackForMessage(reply);
+        setStatus('Assistant reply ready. Speaking response.');
+      } else {
+        setStatus('Assistant reply ready. Replay it when you are ready.');
+      }
     } else {
       setStatus('The assistant returned an empty response.');
     }
@@ -233,6 +360,7 @@ async function sendMessage(rawText) {
     setStatus(`Something went wrong: ${error?.message || error}`);
   } finally {
     els.prompt.value = '';
+    refreshPlayButton();
     setPending(false);
   }
 }
@@ -244,7 +372,9 @@ function handleSendClick() {
 function handleReset() {
   stopSpeaking();
   state.conversation = [];
+  state.lastAssistantMessage = '';
   renderConversation();
+  refreshPlayButton();
   setStatus('Conversation cleared. Ready to listen.');
 }
 
@@ -330,6 +460,67 @@ function setupVoice() {
   });
 }
 
+function setupVoiceControls() {
+  if (els.autoSpeakToggle) {
+    els.autoSpeakToggle.checked = !!state.autoSpeak;
+    els.autoSpeakToggle.title = 'Toggle automatic speech for replies.';
+    els.autoSpeakToggle.addEventListener('change', () => {
+      state.autoSpeak = els.autoSpeakToggle.checked;
+      persistSettings();
+    });
+  }
+
+  if (!state.voicePlaybackSupported) {
+    if (els.voiceSelect) {
+      els.voiceSelect.innerHTML = '<option value="">Voice playback unavailable</option>';
+      els.voiceSelect.disabled = true;
+    }
+    if (els.autoSpeakToggle) {
+      els.autoSpeakToggle.disabled = true;
+    }
+    if (els.playVoice) {
+      els.playVoice.disabled = true;
+    }
+    refreshPlayButton();
+    return;
+  }
+
+  const updateVoices = () => {
+    populateVoiceOptions();
+    refreshPlayButton();
+  };
+  updateVoices();
+
+  if (speechSynth) {
+    if (typeof speechSynth.addEventListener === 'function') {
+      speechSynth.addEventListener('voiceschanged', updateVoices);
+    } else {
+      speechSynth.onvoiceschanged = updateVoices;
+    }
+  }
+
+  if (els.voiceSelect) {
+    els.voiceSelect.title = 'Choose the voice the assistant uses for playback.';
+    els.voiceSelect.addEventListener('change', () => {
+      voiceState.selectedVoiceId = els.voiceSelect.value || null;
+      persistSettings();
+    });
+    if (voiceState.selectedVoiceId) {
+      els.voiceSelect.value = voiceState.selectedVoiceId;
+    }
+  }
+
+  if (els.playVoice) {
+    els.playVoice.title = 'Replay is available once the assistant responds.';
+    els.playVoice.addEventListener('click', () => {
+      if (!state.lastAssistantMessage) return;
+      startVoicePlaybackForMessage(state.lastAssistantMessage);
+    });
+  }
+
+  refreshPlayButton();
+}
+
 function wireEvents() {
   els.send.addEventListener('click', handleSendClick);
   els.reset.addEventListener('click', handleReset);
@@ -340,6 +531,7 @@ function wireEvents() {
       handleSendClick();
     }
   });
+  setupVoiceControls();
   setupVoice();
 }
 
@@ -355,15 +547,22 @@ updateMicButton();
 if (!state.voicePlaybackSupported) {
   els.stopVoice.disabled = true;
   els.stopVoice.title = 'Voice playback is not available in this browser.';
+  if (els.playVoice) {
+    els.playVoice.disabled = true;
+    els.playVoice.title = 'Voice playback is not available in this browser.';
+  }
+  if (els.voiceSelect) {
+    els.voiceSelect.title = 'Voice playback is not available in this browser.';
+  }
 }
 
 if (els.supportHint) {
   if (state.voiceInputSupported && state.voicePlaybackSupported) {
-    els.supportHint.textContent = 'Tip: Use the microphone button or type a message—the assistant will speak replies aloud.';
+    els.supportHint.textContent = 'Tip: Use the microphone button or type a message—adjust the assistant voice or turn speech on/off below.';
   } else if (!state.voiceInputSupported && !state.voicePlaybackSupported) {
     els.supportHint.textContent = 'Voice features are unavailable in this browser. Type to chat with the assistant.';
   } else if (!state.voiceInputSupported) {
-    els.supportHint.textContent = state.voiceInputUnsupportedMessage || 'Microphone access is not supported on this browser. Type messages instead.';
+    els.supportHint.textContent = state.voiceInputUnsupportedMessage || 'Microphone access is not supported on this browser. Use the replay button to hear responses after typing.';
   } else {
     els.supportHint.textContent = 'You can speak to the assistant, but this browser cannot play audio replies yet.';
   }
