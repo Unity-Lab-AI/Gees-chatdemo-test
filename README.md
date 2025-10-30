@@ -29,12 +29,44 @@ The `dev` script delegates to the Vite config in `demo2/`, so the desktop UI ren
 
 ## Building for static hosting
 
-```bash
-npm run build
-```
+Follow these steps any time you want to produce the static bundle that lives under
+`demo2/dist/`:
 
-Artifacts are written to `demo2/dist/`. Deploy that folder to your static host (for example GitHub
-Pages). The desktop entry point is `index.html` and the mobile shell lives at `mobile/index.html`.
+1. **Build the site.**
+
+   ```bash
+   npm run build
+   ```
+
+   Vite compiles the app defined in `demo2/` and writes the optimized output to
+   `demo2/dist/`.
+
+2. **Inspect the output (optional but recommended).** From the repository root use the exact
+   `demo2/dist` path—there is no intermediate `demo/` directory:
+
+   ```bash
+   ls demo2/dist
+   ```
+
+   In PowerShell the equivalent is `Get-ChildItem demo2/dist`. If you prefer to run the command
+   from inside the `demo2/` folder, switch directories first (`cd demo2`) and then list `dist/`
+   (`ls dist` or `Get-ChildItem dist`). You should see an `index.html` file for the desktop chat, a
+   `mobile/` directory for the hands-free Unity persona, plus the hashed JavaScript, CSS, and asset
+   files that Vite generated.
+
+3. **Preview locally (optional).** Use any static file server to make sure the bundle behaves the
+   way you expect before you deploy it. Vite ships with a preview helper:
+
+   ```bash
+   npm run preview
+   ```
+
+   That command serves the built files from `demo2/dist/` on `http://localhost:4173/` (desktop) and
+   `http://localhost:4173/mobile/` (mobile).
+
+4. **Deploy the folder.** Upload the entire `demo2/dist/` directory to your static host (GitHub
+   Pages, Netlify, S3, etc.). The desktop entry point is `index.html`; the mobile experience is at
+   `mobile/index.html` inside the same folder.
 
 ## Configuring the Pollinations token
 
